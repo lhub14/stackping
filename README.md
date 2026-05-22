@@ -51,6 +51,18 @@ stackping will poll each service at the defined interval (in seconds) and fire a
 | `--config` | Path to your YAML config file (default: `services.yaml`) |
 | `--timeout` | Request timeout in seconds (default: `10`) |
 | `--verbose` | Enable verbose logging |
+| `--dry-run` | Validate config and print services without starting the monitor |
+
+---
+
+## Configuration Reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `services[].name` | Yes | Display name for the service |
+| `services[].url` | Yes | URL to poll |
+| `services[].interval` | No | Polling interval in seconds (default: `60`) |
+| `webhook.url` | No | Webhook URL to receive alert payloads |
 
 ---
 
