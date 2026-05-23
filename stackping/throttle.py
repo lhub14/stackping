@@ -55,3 +55,16 @@ class Throttle:
             self._last_alert.clear()
         else:
             self._last_alert.pop(service_name, None)
+
+    def time_until_next_alert(self, service_name: str) -> Optional[float]:
+        """Return seconds remaining before *service_name* may be alerted again.
+
+        Returns ``None`` if the service has no recorded alert or if an alert
+        is already allowed (i.e. the wait period has elapsed).  Returns a
+        positive float representing the remaining cooldown otherwise.
+        """
+        if service_name not in self._last_alert:
+            return None
+        _state, last_ts = self._last_alert[service_name]
+        remaining = self.policy.min_interval - (time.monotonic() - last_ts)
+        return remaining if remaining > 0 else None
