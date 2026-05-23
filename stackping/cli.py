@@ -1,76 +1,98 @@
 """Command-line interface for stackping."""
+from __future__ import annotations
 
-import argparse
 import logging
+import signal
 import sys
-from pathlib import Path
+from argparse import ArgumentParser, Namespace
+from typing import Optional
 
 from stackping.config import ConfigError, load_config
-from stackping.monitor import run_forever
+from stackping.healthcheck import HealthServer
+from stackping.monitor import run_checks, run_forever
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
+
+_DEFAULT_LOG_LEVEL = "INFO"
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+def build_parser() -> ArgumentParser:
+    parser = ArgumentParser(
         prog="stackping",
-        description="Lightweight uptime monitor that reads a YAML service list and sends alerts via webhook.",
+        description="Lightweight uptime monitor",
     )
     parser.add_argument(
         "config",
-        metavar="CONFIG",
-        help="Path to the YAML services configuration file.",
-    )
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set the logging verbosity (default: INFO).",
+        nargs="?",
+        default="services.yaml",
+        help="Path to YAML service config (default: services.yaml)",
     )
     parser.add_argument(
         "--once",
         action="store_true",
-        help="Run checks once and exit instead of looping forever.",
+        help="Run a single check pass then exit",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=_DEFAULT_LOG_LEVEL,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging verbosity (default: INFO)",
+    )
+    parser.add_argument(
+        "--health-port",
+        type=int,
+        default=None,
+        metavar="PORT",
+        help="Expose /health HTTP endpoint on PORT (disabled by default)",
     )
     return parser
 
 
 def setup_logging(level: str) -> None:
     logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         level=getattr(logging, level),
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
+def _start_health_server(port: int) -> HealthServer:
+    srv = HealthServer(port=port)
+    srv.start()
+    log.info("Health endpoint listening on http://0.0.0.0:%d/health", port)
+    return srv
 
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = build_parser()
+    args: Namespace = parser.parse_args(argv)
     setup_logging(args.log_level)
 
-    config_path = Path(args.config)
-    if not config_path.exists():
-        logger.error("Configuration file not found: %s", config_path)
+    try:
+        config = load_config(args.config)
+    except (ConfigError, FileNotFoundError) as exc:
+        log.error("Failed to load config: %s", exc)
         return 1
 
-    try:
-        config = load_config(config_path)
-    except ConfigError as exc:
-        logger.error("Failed to load configuration: %s", exc)
-        return 1
+    health_server: Optional[HealthServer] = None
+    if args.health_port is not None:
+        health_server = _start_health_server(args.health_port)
+        health_server.update({"status": "ok", "services": len(config.services)})
 
-    logger.info(
-        "Loaded %d service(s) from %s", len(config.services), config_path
-    )
+    def _shutdown(sig: int, _frame: object) -> None:  # pragma: no cover
+        log.info("Received signal %d, shutting down.", sig)
+        if health_server:
+            health_server.stop()
+        sys.exit(0)
 
-    try:
-        run_forever(config, run_once=args.once)
-    except KeyboardInterrupt:
-        logger.info("Interrupted — shutting down.")
+    signal.signal(signal.SIGTERM, _shutdown)
 
-    return 0
+    if args.once:
+        run_checks(config)
+        return 0
+
+    run_forever(config)  # pragma: no cover
+    return 0  # pragma: no cover
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())
