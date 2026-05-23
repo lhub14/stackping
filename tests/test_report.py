@@ -16,6 +16,7 @@ def hist(tmp_path: Path) -> History:
 
 
 def add_entry(hist: History, name: str, is_up: bool, code: int | None = None, error: str | None = None) -> None:
+    """Helper to record a single history entry for the given service."""
     hist.record(HistoryEntry.now(service_name=name, is_up=is_up, status_code=code, error=error))
 
 
@@ -56,6 +57,18 @@ def test_summarise_down_with_error(hist: History) -> None:
     add_entry(hist, "db", is_up=False, code=None, error="timeout")
     result = summarise(hist, ["db"])
     assert "timeout" in result[0].last_status
+
+
+def test_summarise_multiple_services(hist: History) -> None:
+    """summarise returns one ServiceSummary per requested service, in order."""
+    add_entry(hist, "alpha", is_up=True, code=200)
+    add_entry(hist, "beta", is_up=False, code=500)
+    result = summarise(hist, ["alpha", "beta"])
+    assert len(result) == 2
+    assert result[0].name == "alpha"
+    assert result[1].name == "beta"
+    assert result[0].up_checks == 1
+    assert result[1].up_checks == 0
 
 
 def test_format_report_contains_header(hist: History) -> None:
