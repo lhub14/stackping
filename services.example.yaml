@@ -1,36 +1,37 @@
 # stackping — example service configuration
-# Copy to services.yaml and customise.
+# Copy this file to services.yaml and adjust to your needs.
 
-# Optional: default values applied to every service unless overridden.
-default_interval: 60   # seconds between health checks
-default_timeout: 10    # HTTP request timeout in seconds
-
-# Webhook URL that receives alert payloads (POST JSON).
-# Leave blank to disable webhook notifications.
-webhook_url: "https://hooks.example.com/services/YOUR/WEBHOOK/TOKEN"
+global:
+  interval: 60          # seconds between checks (default for all services)
+  webhook_url: "https://hooks.example.com/services/XXX/YYY/ZZZ"
 
 services:
-  - name: "Homepage"
-    url: "https://example.com"
-    interval: 60
-    timeout: 10
+  - name: Homepage
+    url: https://example.com
     expected_status: 200
-    tags:
-      - production
-      - web
 
-  - name: "API Health"
-    url: "https://api.example.com/health"
-    interval: 30
+  - name: API health
+    url: https://api.example.com/health
+    expected_status: 200
+    interval: 30          # override global interval for this service
     timeout: 5
-    expected_status: 200
-    tags:
-      - production
-      - api
 
-  - name: "Staging Site"
-    url: "https://staging.example.com"
-    interval: 120
+  - name: Admin panel
+    url: https://admin.example.com
     expected_status: 200
-    tags:
-      - staging
+    timeout: 10
+
+  - name: Metrics endpoint
+    url: https://metrics.example.com/metrics
+    expected_status: 200
+    interval: 120
+
+  - name: Legacy redirect
+    url: https://old.example.com
+    expected_status: 301
+
+  - name: CDN assets
+    url: https://cdn.example.com/ping
+    expected_status: 204
+    timeout: 3
+    interval: 90
